@@ -145,31 +145,31 @@ class AppleStoreMonitor:
             "selected_products": {},
             "selected_area": "",
             "exclude_stores": [],
-            "notification_configs": {
-                "dingtalk": {
-                    "access_token": "",
-                    "secret_key": ""
-                },
-                "telegram": {
-                    "bot_token": "",
-                    "chat_id": "",
-                    "http_proxy": ""
-                },
-                "bark": {
-                    "url": "",
-                    "query_parameters": {
-                        "url": None,
-                        "isArchive": None,
-                        "call": None,
-                        "group": None,
-                        "icon": None,
-                        "automaticallyCopy": None,
-                        "copy": None
-                    }
-                }
-            },
             "scan_interval": 30,
             "alert_exception": False
+        }
+        notification_configs = {
+            "dingtalk": {
+                "access_token": "",
+                "secret_key": ""
+            },
+            "telegram": {
+                "bot_token": "",
+                "chat_id": "",
+                "http_proxy": ""
+            },
+            "bark": {
+                "url": "",
+                "query_parameters": {
+                    "url": None,
+                    "isArchive": None,
+                    "call": None,
+                    "group": None,
+                    "icon": None,
+                    "automaticallyCopy": None,
+                    "copy": None
+                }
+            }
         }
 
         while True:
@@ -187,15 +187,19 @@ class AppleStoreMonitor:
 
             # chose product classification
             print('--------------------')
+            all_product_indexs = []
             for index, (key, value) in enumerate(products[product_type][product_classification].items()):
+                all_product_indexs.append(index)
                 print('[{}] {}'.format(index, value))
                 
-            selected_product_ids = input('选择要监控的产品型号，输入序号[直接回车代表全部监测，多个型号的序号以空格分隔]：').strip().split()
-            if len(selected_product_ids) != 0:
-                selected_product_models = list(map(lambda i: list(products[product_type][product_classification])[int(i)], selected_product_ids))
-                for product_model in selected_product_models:
-                    configs["selected_products"][product_model] = (
-                        product_classification, products[product_type][product_classification][product_model])
+            selected_product_indexs = input('选择要监控的产品型号，输入序号[直接回车代表全部监测，多个型号的序号以空格分隔]：').strip().split()
+            if len(selected_product_indexs) == 0:
+              selected_product_indexs = all_product_indexs
+            
+            selected_product_models = list(map(lambda i: list(products[product_type][product_classification])[int(i)], selected_product_indexs))
+            for product_model in selected_product_models:
+                configs["selected_products"][product_model] = (
+                    product_classification, products[product_type][product_classification][product_model])
 
             print('--------------------')
             if len(input('是否添加更多产品[Enter继续添加，非Enter键退出]：')) != 0:
@@ -254,13 +258,9 @@ class AppleStoreMonitor:
         if os.path.exists('notification_configs.json'):
           existed_notification_configs = json.load(open('notification_configs.json', encoding='utf-8'))
           print("发现通知配置文件：\n\n{}".format(json.dumps(existed_notification_configs)))
-          if input('\n是否使用已有通知配置？[y/n]：').lower().strip() == "y":
+          if (input('\n是否使用已有通知配置？[Y/n，默认为Y]：').lower().strip() or "y") == "y":
             use_existed_notification_configs = True
-        if use_existed_notification_configs: 
-          configs["notification_configs"] = existed_notification_configs
-        else:
-          notification_configs = configs["notification_configs"]
-
+        if not use_existed_notification_configs: 
           # config dingtalk notification
           dingtalk_access_token = input('输入钉钉机器人Access Token[如不配置直接回车即可]：')
           dingtalk_secret_key = input('输入钉钉机器人Secret Key[如不配置直接回车即可]：')
@@ -286,6 +286,9 @@ class AppleStoreMonitor:
 
           # write dingtalk configs
           notification_configs["bark"]["url"] = bark_url
+          
+          with open('notification_configs.json', 'w') as file:
+            json.dump(notification_configs, file, ensure_ascii=False, indent=2)
 
         # 输入扫描间隔时间
         print('--------------------')
@@ -305,10 +308,10 @@ class AppleStoreMonitor:
         开始监控
         """
         configs = json.load(open('apple_store_monitor_configs.json', encoding='utf-8'))
+        notification_configs = json.load(open('notification_configs.json', encoding='utf-8'))
         selected_products = configs["selected_products"]
         selected_area = configs["selected_area"]
         exclude_stores = configs["exclude_stores"]
-        notification_configs = configs["notification_configs"]
         scan_interval = configs["scan_interval"]
         alert_exception = configs["alert_exception"]
 
