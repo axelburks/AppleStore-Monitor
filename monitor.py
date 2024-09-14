@@ -109,7 +109,14 @@ class Utils:
             return
 
         url = "{}/{}".format(bark_configs["url"].strip("/"), urllib.parse.quote(message, safe=""))
-        response = requests.post(url, params=bark_configs["query_parameters"])
+        params = bark_configs["query_parameters"]
+        if "扫描到直营店有货" not in message:
+          params["isArchive"] = 0
+          params["level"] = None
+          params["url"] = None
+          params["group"] = None
+          params["call"] = 0
+        response = requests.post(url, params=params)
         Utils.log("Bark发送消息状态码：{}".format(response.status_code))
 
 
@@ -153,6 +160,7 @@ class AppleStoreMonitor:
                     "query_parameters": {
                         "url": None,
                         "isArchive": None,
+                        "call": None,
                         "group": None,
                         "icon": None,
                         "automaticallyCopy": None,
@@ -181,10 +189,13 @@ class AppleStoreMonitor:
             print('--------------------')
             for index, (key, value) in enumerate(products[product_type][product_classification].items()):
                 print('[{}] {}'.format(index, value))
-            product_model = list(products[product_type][product_classification])[int(input('选择要监控的产品型号：'))]
-
-            configs["selected_products"][product_model] = (
-                product_classification, products[product_type][product_classification][product_model])
+                
+            selected_product_ids = input('选择要监控的产品型号，输入序号[直接回车代表全部监测，多个型号的序号以空格分隔]：').strip().split()
+            if len(selected_product_ids) != 0:
+                selected_product_models = list(map(lambda i: list(products[product_type][product_classification])[int(i)], selected_product_ids))
+                for product_model in selected_product_models:
+                    configs["selected_products"][product_model] = (
+                        product_classification, products[product_type][product_classification][product_model])
 
             print('--------------------')
             if len(input('是否添加更多产品[Enter继续添加，非Enter键退出]：')) != 0:
@@ -239,33 +250,42 @@ class AppleStoreMonitor:
 
         print('--------------------')
         # config notification configurations
-        notification_configs = configs["notification_configs"]
+        use_existed_notification_configs = False
+        if os.path.exists('notification_configs.json'):
+          existed_notification_configs = json.load(open('notification_configs.json', encoding='utf-8'))
+          print("发现通知配置文件：\n\n{}".format(json.dumps(existed_notification_configs)))
+          if input('\n是否使用已有通知配置？[y/n]：').lower().strip() == "y":
+            use_existed_notification_configs = True
+        if use_existed_notification_configs: 
+          configs["notification_configs"] = existed_notification_configs
+        else:
+          notification_configs = configs["notification_configs"]
 
-        # config dingtalk notification
-        dingtalk_access_token = input('输入钉钉机器人Access Token[如不配置直接回车即可]：')
-        dingtalk_secret_key = input('输入钉钉机器人Secret Key[如不配置直接回车即可]：')
+          # config dingtalk notification
+          dingtalk_access_token = input('输入钉钉机器人Access Token[如不配置直接回车即可]：')
+          dingtalk_secret_key = input('输入钉钉机器人Secret Key[如不配置直接回车即可]：')
 
-        # write dingtalk configs
-        notification_configs["dingtalk"]["access_token"] = dingtalk_access_token
-        notification_configs["dingtalk"]["secret_key"] = dingtalk_secret_key
+          # write dingtalk configs
+          notification_configs["dingtalk"]["access_token"] = dingtalk_access_token
+          notification_configs["dingtalk"]["secret_key"] = dingtalk_secret_key
 
-        # config telegram notification
-        print('--------------------')
-        telegram_chat_id = input('输入Telegram机器人Chat ID[如不配置直接回车即可]：')
-        telegram_bot_token = input('输入Telegram机器人Token[如不配置直接回车即可]：')
-        telegram_http_proxy = input('输入Telegram HTTP代理地址[如不配置直接回车即可]：')
+          # config telegram notification
+          print('--------------------')
+          telegram_chat_id = input('输入Telegram机器人Chat ID[如不配置直接回车即可]：')
+          telegram_bot_token = input('输入Telegram机器人Token[如不配置直接回车即可]：')
+          telegram_http_proxy = input('输入Telegram HTTP代理地址[如不配置直接回车即可]：')
 
-        # write telegram configs
-        notification_configs["telegram"]["chat_id"] = telegram_chat_id
-        notification_configs["telegram"]["bot_token"] = telegram_bot_token
-        notification_configs["telegram"]["http_proxy"] = telegram_http_proxy
+          # write telegram configs
+          notification_configs["telegram"]["chat_id"] = telegram_chat_id
+          notification_configs["telegram"]["bot_token"] = telegram_bot_token
+          notification_configs["telegram"]["http_proxy"] = telegram_http_proxy
 
-        # config bark notification
-        print('--------------------')
-        bark_url = input('输入Bark URL[如不配置直接回车即可]：')
+          # config bark notification
+          print('--------------------')
+          bark_url = input('输入Bark URL[如不配置直接回车即可]：')
 
-        # write dingtalk configs
-        notification_configs["bark"]["url"] = bark_url
+          # write dingtalk configs
+          notification_configs["bark"]["url"] = bark_url
 
         # 输入扫描间隔时间
         print('--------------------')
@@ -276,9 +296,9 @@ class AppleStoreMonitor:
         configs["alert_exception"] = (input('是否在程序异常时发送通知[Y/n，默认为n]：').lower().strip() or "n") == "y"
 
         with open('apple_store_monitor_configs.json', 'w') as file:
-            json.dump(configs, file, indent=2)
+            json.dump(configs, file, ensure_ascii=False, indent=2)
             print('--------------------')
-            print("扫描配置已生成，并已写入到{}文件中\n请使用 python {} start 命令启动监控".format(file.name, os.path.abspath(__file__)))
+            print("扫描配置已生成，并已写入到 {} 文件中\n请使用 python {} start 命令启动监控".format(file.name, os.path.abspath(__file__)))
 
     def start(self):
         """
@@ -341,7 +361,7 @@ class AppleStoreMonitor:
                         pickup_display = item['partsAvailability'][product_code]['pickupDisplay']
                         store_pickup_product_title = item['partsAvailability'][product_code]['messageTypes']['regular']['storePickupProductTitle']
                         print('\t【{}】{}'.format(pickup_search_quote, store_pickup_product_title))
-                        if pickup_search_quote == '今天可取货' or pickup_display != 'unavailable':
+                        if pickup_search_quote == '今天可取货' or not (pickup_display == 'unavailable' or pickup_display == "ineligible"):
                             available_list.append((store_name, product_code, store_pickup_product_title))
 
                 if len(available_list) > 0:
